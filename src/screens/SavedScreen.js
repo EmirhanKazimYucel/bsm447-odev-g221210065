@@ -5,10 +5,13 @@ import { COLORS } from '../constants/config';
 export default function SavedScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Kaydedilen Depremler</Text>
-      <Text style={styles.info}>
-        AsyncStorage ile kaydedilen depremler burada listelenecek.
-      </Text>
+      <View style={styles.emptyCard}>
+        <Text style={styles.title}>Kaydedilen Depremler</Text>
+        <Text style={styles.info}>
+          Henüz kaydedilmiş bir deprem bulunmuyor. Detay ekranından kaydettiğiniz
+          depremler uygulama kapatılıp açılsa bile burada görünecektir.
+        </Text>
+      </View>
     </View>
   );
 }
@@ -17,12 +20,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    alignItems: 'center',
+    padding: 16,
     justifyContent: 'center',
+  },
+  emptyCard: {
+    backgroundColor: COLORS.card,
     padding: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
   },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.textPrimary,
     marginBottom: 8,
@@ -31,5 +41,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
     textAlign: 'center',
+    lineHeight: 20,
   },
 });
