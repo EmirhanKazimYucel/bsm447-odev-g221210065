@@ -1,25 +1,125 @@
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { COLORS, STUDENT_INFO } from '../constants/config';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { API_ENDPOINTS, COLORS, STUDENT_INFO } from '../constants/config';
 
-// Navigasyon testi için örnek deprem kaydı (3. günde canlı Kandilli API verisiyle değiştirilecek)
-const SAMPLE_EARTHQUAKE = {
-  earthquake_id: 'sample-k13-1',
-  title: 'KUSADASI KORFEZI (EGE DENIZI)',
-  mag: 3.4,
-  depth: 7.2,
-  date_time: '2026-11-24 12:30:00',
-  geojson: {
-    coordinates: [27.1452, 37.8621],
-  },
-  location_properties: {
-    closestCity: {
-      name: 'Aydın',
-    },
-  },
-};
+// Ana API (Kandilli) yanıt vermezse yedek USGS verisini aynı veri yapısına dönüştürür
+function normalizeUsgsFeatures(features = []) {
+  return features.map((item) => {
+    const coords = item.geometry?.coordinates || [0, 0, 0];
+    const dateObj = item.properties?.time ? new Date(item.properties.time) : new Date();
+    const formattedDate = dateObj.toISOString().replace('T', ' ').substring(0, 19);
+
+    return {
+      earthquake_id: String(item.id || Math.random()),
+      title: item.properties?.place || 'Türkiye Çevresi',
+      mag: Number(item.properties?.mag || 0),
+      depth: Number(coords[2] || 0),
+      date_time: formattedDate,
+      geojson: {
+        coordinates: [coords[0], coords[1]],
+      },
+      location_properties: {
+        closestCity: {
+          name: item.properties?.place || 'Belirtilmemiş',
+        },
+      },
+    };
+  });
+}
 
 export default function ListScreen({ navigation }) {
+  const [earthquakes, setEarthquakes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchEarthquakes = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(API_ENDPOINTS.KANDILLI_LIVE);
+      if (!response.ok) {
+        throw new Error('Kandilli API yanıt vermedi');
+      }
+
+      const json = await response.json();
+      const rawList = Array.isArray(json.result) ? json.result : [];
+
+      // Varyant c süzmesi: Yalnızca derinliği 10 km ve altında olanlar (depth <= 10)
+      const filteredByDepth = rawList.filter(
+        (item) => Number(item.depth) <= 10
+      );
+
+      setEarthquakes(filteredByDepth);
+    } catch (primaryErr) {
+      try {
+        // Ana servis çalışmazsa dokümanda belirtilen yedek USGS servisini dene
+        const fallbackRes = await fetch(API_ENDPOINTS.USGS_FALLBACK);
+        const fallbackJson = await fallbackRes.json();
+        const normalized = normalizeUsgsFeatures(fallbackJson.features);
+        const filteredByDepth = normalized.filter(
+          (item) => Number(item.depth) <= 10
+        );
+        setEarthquakes(filteredByDepth);
+      } catch (fallbackErr) {
+        setError('Deprem verileri alınırken bağlantı hatası oluştu.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEarthquakes();
+  }, []);
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.75}
+      onPress={() => navigation.navigate('Detay', { earthquake: item })}
+    >
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardTitle}>{item.title}</Text>
+        <View style={styles.magBadge}>
+          <Text style={styles.magText}>{Number(item.mag).toFixed(1)}</Text>
+        </View>
+      </View>
+
+      <View style={styles.cardFooter}>
+        <Text style={styles.cardDate}>Tarih: {item.date_time}</Text>
+        <Text style={styles.cardDepth}>Derinlik: {item.depth} km</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.statusText}>Deprem verileri yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchEarthquakes}>
+          <Text style={styles.retryButtonText}>Tekrar Dene</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.banner}>
@@ -27,28 +127,17 @@ export default function ListScreen({ navigation }) {
           {STUDENT_INFO.topicCode} · {STUDENT_INFO.topicTitle}
         </Text>
         <Text style={styles.bannerSub}>
-          Varyant: {STUDENT_INFO.variant} | Ek Kural: {STUDENT_INFO.extraRule}
+          Varyant: {STUDENT_INFO.variant} ({earthquakes.length} kayıt)
         </Text>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{SAMPLE_EARTHQUAKE.title}</Text>
-        <Text style={styles.cardMeta}>
-          Büyüklük: {SAMPLE_EARTHQUAKE.mag} | Derinlik: {SAMPLE_EARTHQUAKE.depth} km
-        </Text>
-        <Text style={styles.cardDate}>{SAMPLE_EARTHQUAKE.date_time}</Text>
-
-        <TouchableOpacity
-          style={styles.detailButton}
-          onPress={() =>
-            navigation.navigate('Detay', { earthquake: SAMPLE_EARTHQUAKE })
-          }
-        >
-          <Text style={styles.detailButtonText}>
-            Detay Ekranına Git (route.params testi)
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <FlatList
+        data={earthquakes}
+        keyExtractor={(item) => String(item.earthquake_id)}
+        renderItem={renderItem}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }
@@ -57,59 +146,101 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    padding: 16,
+  },
+  centerContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  statusText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: COLORS.textSecondary,
+  },
+  errorText: {
+    fontSize: 15,
+    color: COLORS.magHigh,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   banner: {
     backgroundColor: COLORS.card,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   bannerTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     color: COLORS.textPrimary,
   },
   bannerSub: {
     fontSize: 13,
     color: COLORS.textSecondary,
-    marginTop: 4,
+    marginTop: 2,
+  },
+  listContent: {
+    padding: 16,
   },
   card: {
     backgroundColor: COLORS.card,
-    padding: 16,
+    padding: 14,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
+    marginBottom: 12,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   cardTitle: {
-    fontSize: 16,
+    flex: 1,
+    fontSize: 15,
     fontWeight: 'bold',
     color: COLORS.textPrimary,
-    marginBottom: 6,
+    marginRight: 10,
   },
-  cardMeta: {
+  magBadge: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    minWidth: 44,
+    alignItems: 'center',
+  },
+  magText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
     fontSize: 14,
-    color: COLORS.primary,
-    marginBottom: 4,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   cardDate: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    marginBottom: 14,
   },
-  detailButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  detailButtonText: {
-    color: '#FFFFFF',
+  cardDepth: {
+    fontSize: 12,
     fontWeight: '600',
-    fontSize: 14,
+    color: COLORS.textPrimary,
   },
 });
