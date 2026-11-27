@@ -8,13 +8,22 @@ import {
   View,
 } from 'react-native';
 import { API_ENDPOINTS, COLORS, STUDENT_INFO } from '../constants/config';
+import {
+  formatRelativeTime,
+  getMagnitudeColor,
+} from '../utils/earthquakeHelpers';
 
 // Ana API (Kandilli) yanıt vermezse yedek USGS verisini aynı veri yapısına dönüştürür
 function normalizeUsgsFeatures(features = []) {
   return features.map((item) => {
     const coords = item.geometry?.coordinates || [0, 0, 0];
-    const dateObj = item.properties?.time ? new Date(item.properties.time) : new Date();
-    const formattedDate = dateObj.toISOString().replace('T', ' ').substring(0, 19);
+    const dateObj = item.properties?.time
+      ? new Date(item.properties.time)
+      : new Date();
+    const formattedDate = dateObj
+      .toISOString()
+      .replace('T', ' ')
+      .substring(0, 19);
 
     return {
       earthquake_id: String(item.id || Math.random()),
@@ -80,25 +89,31 @@ export default function ListScreen({ navigation }) {
     fetchEarthquakes();
   }, []);
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.75}
-      onPress={() => navigation.navigate('Detay', { earthquake: item })}
-    >
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.title}</Text>
-        <View style={styles.magBadge}>
-          <Text style={styles.magText}>{Number(item.mag).toFixed(1)}</Text>
-        </View>
-      </View>
+  const renderItem = ({ item }) => {
+    const badgeColor = getMagnitudeColor(item.mag);
+    const relativeTime = formatRelativeTime(item.date_time || item.date);
 
-      <View style={styles.cardFooter}>
-        <Text style={styles.cardDate}>Tarih: {item.date_time}</Text>
-        <Text style={styles.cardDepth}>Derinlik: {item.depth} km</Text>
-      </View>
-    </TouchableOpacity>
-  );
+    return (
+      <TouchableOpacity
+        style={[styles.card, { borderLeftColor: badgeColor }]}
+        activeOpacity={0.75}
+        onPress={() => navigation.navigate('Detay', { earthquake: item })}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+          <View style={[styles.magBadge, { backgroundColor: badgeColor }]}>
+            <Text style={styles.magText}>{Number(item.mag).toFixed(1)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.cardFooter}>
+          <Text style={styles.cardRelativeTime}>⏱ {relativeTime}</Text>
+          <Text style={styles.cardDate}>{item.date_time || item.date}</Text>
+          <Text style={styles.cardDepth}>Derinlik: {item.depth} km</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
@@ -129,6 +144,26 @@ export default function ListScreen({ navigation }) {
         <Text style={styles.bannerSub}>
           Varyant: {STUDENT_INFO.variant} ({earthquakes.length} kayıt)
         </Text>
+        <View style={styles.legendRow}>
+          <View style={styles.legendItem}>
+            <View
+              style={[styles.legendDot, { backgroundColor: COLORS.magLow }]}
+            />
+            <Text style={styles.legendText}>{'< 3 Yeşil'}</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View
+              style={[styles.legendDot, { backgroundColor: COLORS.magMedium }]}
+            />
+            <Text style={styles.legendText}>3–3.9 Turuncu</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View
+              style={[styles.legendDot, { backgroundColor: COLORS.magHigh }]}
+            />
+            <Text style={styles.legendText}>{'≥ 4 Kırmızı'}</Text>
+          </View>
+        </View>
       </View>
 
       <FlatList
@@ -192,6 +227,26 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
+  legendRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 14,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 5,
+  },
+  legendText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
   listContent: {
     padding: 16,
   },
@@ -201,13 +256,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
+    borderLeftWidth: 5,
     marginBottom: 12,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   cardTitle: {
     flex: 1,
@@ -217,11 +273,10 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   magBadge: {
-    backgroundColor: COLORS.primary,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
-    minWidth: 44,
+    minWidth: 46,
     alignItems: 'center',
   },
   magText: {
@@ -233,6 +288,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  cardRelativeTime: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   cardDate: {
     fontSize: 12,
