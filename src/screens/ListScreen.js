@@ -4,9 +4,11 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { API_ENDPOINTS, COLORS, STUDENT_INFO } from '../constants/config';
 import {
   formatRelativeTime,
@@ -45,6 +47,7 @@ function normalizeUsgsFeatures(features = []) {
 
 export default function ListScreen({ navigation }) {
   const [earthquakes, setEarthquakes] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -88,6 +91,16 @@ export default function ListScreen({ navigation }) {
   useEffect(() => {
     fetchEarthquakes();
   }, []);
+
+  // Büyük/küçük harfe duyarsız arama süzmesi (title alanına göre)
+  const filteredEarthquakes = earthquakes.filter((item) => {
+    if (!searchQuery.trim()) {
+      return true;
+    }
+    const queryLower = searchQuery.trim().toLocaleLowerCase('tr-TR');
+    const titleLower = String(item.title || '').toLocaleLowerCase('tr-TR');
+    return titleLower.includes(queryLower);
+  });
 
   const renderItem = ({ item }) => {
     const badgeColor = getMagnitudeColor(item.mag);
@@ -142,7 +155,7 @@ export default function ListScreen({ navigation }) {
           {STUDENT_INFO.topicCode} · {STUDENT_INFO.topicTitle}
         </Text>
         <Text style={styles.bannerSub}>
-          Varyant: {STUDENT_INFO.variant} ({earthquakes.length} kayıt)
+          Varyant: {STUDENT_INFO.variant} ({filteredEarthquakes.length} kayıt)
         </Text>
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
@@ -164,14 +177,39 @@ export default function ListScreen({ navigation }) {
             <Text style={styles.legendText}>{'≥ 4 Kırmızı'}</Text>
           </View>
         </View>
+
+        <View style={styles.searchBox}>
+          <Ionicons
+            name="search-outline"
+            size={18}
+            color={COLORS.textSecondary}
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Deprem bölgesi veya şehir ara..."
+            placeholderTextColor={COLORS.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
       </View>
 
       <FlatList
-        data={earthquakes}
+        data={filteredEarthquakes}
         keyExtractor={(item) => String(item.earthquake_id)}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptySearchContainer}>
+            <Text style={styles.emptySearchText}>
+              Aramanızla eşleşen deprem kaydı bulunamadı.
+            </Text>
+          </View>
+        }
       />
     </View>
   );
@@ -247,6 +285,26 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontWeight: '500',
   },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    marginTop: 12,
+    height: 42,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    paddingVertical: 8,
+  },
   listContent: {
     padding: 16,
   },
@@ -302,5 +360,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.textPrimary,
+  },
+  emptySearchContainer: {
+    paddingVertical: 36,
+    alignItems: 'center',
+  },
+  emptySearchText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
 });
